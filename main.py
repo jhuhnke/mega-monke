@@ -5,13 +5,9 @@ from decouple import config
 # Load the API key from the .env file
 api_key = config('API_KEY')
 
-# Helius URL for getting the mint list
-mint_list_url = f"https://api.helius.xyz/v1/mintlist?api-key={api_key}"
-
 # Helius RPC URL
 rpc_url = f"https://rpc.helius.xyz/?api-key={api_key}"
 
-timeout = 30
 rpc_timeout = 60  # Timeout for RPC request
 
 # Maximum number of retry attempts
@@ -20,94 +16,66 @@ max_retries = 20
 # Delay between retry attempts (in seconds)
 retry_delay = 20  # Adjust this value as needed
 
-# Function to fetch mints based on creators and minimum count
-def fetch_mints(creators, min_count):
-    response = requests.post(mint_list_url, json={
-        "query": {
-            "firstVerifiedCreators": creators,
-        },
-        "options": {
-            "limit": 10000,  # Adjust the limit as needed
-        }
-    }, timeout=timeout)
+# Function to fetch owners for a list of assets based on collection ID and minimum count
+def fetch_owners(collection_id, min_count):
+    page = 1
+    owners = []
 
-    if response.status_code == 200:
+    while True:
+        response = requests.post(rpc_url, json={
+            "jsonrpc": "2.0",
+            "id": "my-id",
+            "method": "getAssetsByGroup",
+            "params": {
+                "groupKey": "collection",
+                "groupValue": collection_id,
+                "page": page,
+                "limit": 1000,
+            },
+        }, timeout=rpc_timeout)
+
+        if response.status_code != 200:
+            print(f"RPC request failed with status code {response.status_code}")
+            return []
+
         data = response.json()
-        mints = [item["mint"] for item in data["result"]]
-        return mints
-    else:
-        print("API request failed:", response.status_code)
-        return []
+        assets = data.get("result", {}).get("items", [])
 
-# Gen2 Creators
-creators_gen2 = ["mdaoxg4DVGptU4WSpzGyVpK3zqsgn7Qzx5XNgWTcEA2"]
-mint_list_gen2 = fetch_mints(creators_gen2, 5)
+        for asset in assets:
+            owner = asset.get('ownership', {}).get('owner')
+            owners.append(owner)
 
-# Gen3 Creators
-creators_gen3 = ["HV4Nvm9zHfNA43JYYkjZu8vwqiuE8bfEhwcKFfyQ65o5"]
-mint_list_gen3 = fetch_mints(creators_gen3, 50)
+        if len(assets) < 1000:
+            break  # Reached the end of the collection
 
-# Function to fetch holders for a list of mints
-def fetch_holder(address):
-    asset_id = address
-    response = requests.post(rpc_url, json={
-        "jsonrpc": "2.0",
-        "id": "my-id",
-        "method": "getAsset",
-        "params": [asset_id],
-    }, timeout=rpc_timeout)  # Set the timeout here
+        page += 1
 
-    if response.status_code == 200:
-        data = response.json()
-        owner = data["result"]["ownership"]["owner"]
-        return owner
-    else:
-        print(f"API request for mint {address} failed:", response.status_code)
-        return None
+    return owners
 
-# Function to fetch holders for a list of mints
-def fetch_holders(mint_list):
-    holder_counts = {}
+# Gen2 Collection ID (Replace with your actual Gen2 collection ID)
+collection_id_gen2 = "SMBtHCCC6RYRutFEPb4gZqeBLUZbMNhRKaMKZZLHi7W"
+owners_gen2 = fetch_owners(collection_id_gen2, 1)
+gen2_holders = [address for address in owners_gen2 if owners_gen2.count(address) >= 5]
 
-    for mint in mint_list:
-        retries = 0
-        while retries < max_retries:
-            try:
-                owner = fetch_holder(mint)
-                if owner:
-                    if owner in holder_counts:
-                        holder_counts[owner] += 1
-                    else:
-                        holder_counts[owner] = 1
-                    break  # Success, break out of retry loop
-                else:
-                    print(f"RPC request for mint {mint} returned None.")
-            except requests.exceptions.Timeout:
-                print(f"RPC request for mint {mint} timed out, retrying in {retry_delay} seconds...")
-                retries += 1
-                time.sleep(retry_delay)
+# Gen3 Collection ID (Replace with your actual Gen3 collection ID)
+collection_id_gen3 = "8Rt3Ayqth4DAiPnW9MDFi63TiQJHmohfTWLMQFHi4KZH"
+owners_gen3 = fetch_owners(collection_id_gen3, 1)
+gen3_holders = [address for address in owners_gen3 if owners_gen3.count(address) >= 50]
 
-        if retries >= max_retries:
-            print(f"Max retries reached for mint {mint}, unable to fetch holder address.")
+# Merge all mega monkes and deduplicate
+all_mega_monkes = list(set(gen2_holders + gen3_holders))
 
-    return holder_counts
-
-# Gen2 Holders
-holder_counts_gen2 = fetch_holders(mint_list_gen2)
-gen2_holders = [address for address, count in holder_counts_gen2.items() if count >= 5]
-print(len(gen2_holders))
-
-# Gen3 Holders
-holder_counts_gen3 = fetch_holders(mint_list_gen3)
-gen3_holders = [address for address, count in holder_counts_gen3.items() if count >= 50]
-print(len(gen3_holders))
+# Find double mega monke (common wallets in both Gen2 and Gen3)
+double_mega_monke = list(set(gen2_holders) & set(gen3_holders))
 
 # Create a DataFrame for the new data
 new_data = pd.DataFrame({
     'date': [pd.Timestamp.now()],
     'gen_2_mega_monkes': [gen2_holders],
     'gen_3_mega_monkes': [gen3_holders],
-    'total_mega_monkes': [len(gen2_holders) + len(gen3_holders)]
+    'all_mega_monkes': [all_mega_monkes],
+    'double_mega_monkes': [double_mega_monke],
+    'total_mega_monkes': [len(all_mega_monkes)]
 })
 
 # Load the existing .csv file if it exists
