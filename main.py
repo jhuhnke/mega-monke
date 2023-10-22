@@ -1,5 +1,6 @@
 import requests
 import pandas as pd
+import os
 
 # Load the API key from the .env file
 api_key = os.environ['API_KEY']
