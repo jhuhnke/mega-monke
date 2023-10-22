@@ -1,9 +1,8 @@
 import requests
 import pandas as pd
-from decouple import config
 
 # Load the API key from the .env file
-api_key = config('API_KEY')
+api_key = os.environ['API_KEY']
 
 # Helius RPC URL
 rpc_url = f"https://rpc.helius.xyz/?api-key={api_key}"
