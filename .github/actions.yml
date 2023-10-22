@@ -1,0 +1,39 @@
+name: Daily Cron Job
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Schedule to run at 0 UTC daily
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.11
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt  # Modify this according to your project's requirements
+
+      - name: Run Python script
+        env: 
+          API_KEY: ${{ secrets.API_KEY }}
+        run: python main.py
+
+      - name: commit files
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add -A
+          git diff-index --quiet HEAD || (git commit -a -m "updated files" --allow-empty)
+
+      - name: push changes
+        uses: ad-m/github-push-action@v0.6.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: main
