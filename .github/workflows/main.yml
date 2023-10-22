@@ -2,7 +2,7 @@ name: Daily Cron Job
 
 on:
   schedule:
-    - cron: '0 14 * * *'  # Schedule to run at 0 UTC daily
+    - cron: '0 15 * * *'  # Schedule to run at 0 UTC daily
 
 jobs:
   build:
